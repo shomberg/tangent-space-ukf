@@ -51,7 +51,6 @@ class unscentedKalmanFilter:
         for i in xrange(self.mean.shape[0]):
             points.append(self.mean-root[i].getT())
 
-        #print points
         #Time update
         #Repack sigma points into objects
         objectPoints = []
@@ -157,7 +156,6 @@ class unscentedKalmanFilter:
         self.covar[0:covar_state.shape[0],0:covar_state.shape[1]] = covar_state
         
     def getMarginalDistribution(self):
-        print self.covar
         #Pack in order to return
         counter = 0
         mRet = []
@@ -263,8 +261,6 @@ class unscentedKalmanFilter:
             points.append(mean+root[i].getT())
         for i in xrange(mean.shape[0]):
             points.append(mean-root[i].getT())
-
-        print points[0]
 
         objectPoints = []
         for p in points:
