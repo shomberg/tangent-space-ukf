@@ -40,7 +40,7 @@ class unscentedKalmanFilter:
         self.measurement_predict_function = h
 
 
-    def step(self, measurement, indices, W_0=.001):
+    def step(self, measurement, indices, command=None, W_0=.001):
         #Sigma point selection
         points = []
         weights = [W_0] + [(1-W_0)/(2*self.mean.shape[0])]*(2*self.mean.shape[0])
@@ -58,14 +58,14 @@ class unscentedKalmanFilter:
             counter = 0
             l = []
             for i in xrange(len(self.dims)):
-                l.append(self.types[i].exp(*[p[counter:counter+self.dims[i],0]]+[self.origins[i]]+[self.bases[i]]))
+                l.append(self.types[i].exp(p[counter:counter+self.dims[i],0],self.origins[i],self.bases[i]))
                 counter += self.dims[i]
             objectPoints.append(l)
 
         #Apply unscented transformation
         state_forecast = []
         for i in xrange(len(objectPoints)):
-            state_forecast.append(self.update_function(objectPoints[i],points[i][self.stateDim:self.stateDim+self.processNoiseDim,0]))
+            state_forecast.append(self.update_function(command, objectPoints[i],points[i][self.stateDim:self.stateDim+self.processNoiseDim,0]))
 
         #Calculate appropriate(mean) space for reprojection
         self.origins = [0]*len(state_forecast[0])
@@ -160,7 +160,7 @@ class unscentedKalmanFilter:
         counter = 0
         mRet = []
         for i in xrange(len(self.dims)):
-            mRet.append(self.types[i].exp(*[self.mean[counter:counter+self.dims[i],0]]+[self.origins[i]]+[self.bases[i]]))
+            mRet.append(self.types[i].exp(self.mean[counter:counter+self.dims[i],0],self.origins[i],self.bases[i]))
             counter += self.dims[i]
         
         #Returns updated mean as list of objects
