@@ -10,7 +10,7 @@ import math
 from kalman_util import append_matrices
 
 class unscentedKalmanFilter:
-    def __init__(self, objects, covars, bases, f, h, Q, R):
+    def __init__(self, objects, covars, bases, f, h, symmetries, Q, R):
         #Unpack mean vector from objects
         self.mean = matrix([[]]).reshape((0,1))
         self.dims = []
@@ -38,6 +38,7 @@ class unscentedKalmanFilter:
         self.covar = append_matrices([self.covar,Q,R])
         self.update_function = f
         self.measurement_predict_function = h
+        self.syms = symmetries
 
 
     def step(self, measurement, indices, command=None, W_0=.001):
@@ -125,7 +126,7 @@ class unscentedKalmanFilter:
                     add = matrix(concatenate((add,x[i].log(measurement_origins[i],measurement_bases[i]))))
                 measurement_forecast_projected.append(add)
 
-            #Update measurement mean and covariance
+            #Update measurement forecast mean and covariance
             mean_z = 0
             for i in xrange(len(measurement_forecast_projected)):
                 mean_z += weights[i]*measurement_forecast_projected[i]
@@ -143,7 +144,7 @@ class unscentedKalmanFilter:
             #Reproject Measurement
             measurement_projected = matrix([[]]).reshape((0,1))
             for i in xrange(len(measurement)):
-                measurement_projected = matrix(concatenate((measurement_projected,measurement[i].log(measurement_origins[i],measurement_bases[i]))))
+                measurement_projected = matrix(concatenate((measurement_projected,measurement[i].log(measurement_origins[i],measurement_bases[i],self.syms[i]))))
 
             self.mean = self.mean + gain*(measurement_projected-mean_z)
             

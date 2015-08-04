@@ -1,5 +1,5 @@
 from numpy import matrix, conjugate
-from math import atan2, sin, cos
+from math import atan2, sin, cos, pi
 
 class Angle:
     def __init__(self, r):
@@ -36,10 +36,24 @@ class Angle:
     def toRadians(self):
         return atan2(self.r.imag, self.r.real)
 
-    def log(self, rSpace, basis):
-        k = (rSpace*conjugate(rSpace)).real/(self.r*conjugate(rSpace)).real
-        coord = k*self.r-rSpace
+    def log(self, rSpace, basis, symmetry=None):
+        rUse = self.r
+        if symmetry:
+            otherT = Angle(rSpace).toRadians()
+            plus = (self.toRadians()-otherT)%(2*pi/symmetry)
+            minus = plus-(2*pi/symmetry)
+            if plus + minus > 0:
+                rUse = Angle.fromRadians(otherT+minus).r
+            else:
+                rUse = Angle.fromRadians(otherT+plus).r
+        k = (rSpace*conjugate(rSpace)).real/(rUse*conjugate(rSpace)).real
+        coord = k*rUse-rSpace
         return basis.getI()*(matrix([[coord.real],[coord.imag]]))
+
+    def relative(self, reference):
+        if not isinstance(reference, Angle):
+            raise TypeError('Argument must be an angle')
+        return Angle(self.r/reference.r)
 
     def __str__(self):
         return "Angle("+str(self.r)+")"

@@ -24,8 +24,13 @@ class Vector:
     def normalizeOrigin(cls, o):
         return o
 
-    def log(self, o, basis):
+    def log(self, o, basis, symmetry=None):
         return basis.getI()*(self.v-o)
+
+    def relative(self, reference):
+        if not isinstance(reference, Vector):
+            raise TypeError('Argument must be a vector')
+        return Vector(self.v-reference.v)
 
     def __str__(self):
         return str(self.v)

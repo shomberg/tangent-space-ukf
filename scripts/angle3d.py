@@ -47,7 +47,7 @@ class Angle3D:
             raise ValueError('Axis must be nonzero')
         return Angle3D(Quaternion(*(sin(theta/2)*axis).getT().tolist()[0]+[cos(theta/2)]))
 
-    def log(self, rSpace, basis):
+    def log(self, rSpace, basis, symmetry=None):
         k = rSpace.dot(rSpace)/(self.r.dot(rSpace))
         return basis.getI()*((k*self.r-rSpace).asVector())
 
