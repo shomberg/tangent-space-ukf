@@ -1,4 +1,6 @@
 from numpy import matrix, identity
+from angle import Angle
+from math import cos, sin
 
 class Vector:
     def __init__(self, v):
@@ -27,10 +29,20 @@ class Vector:
     def log(self, o, basis, symmetry=None):
         return basis.getI()*(self.v-o)
 
-    def relative(self, reference):
-        if not isinstance(reference, Vector):
+    def relative(self, reference, indices):
+        if isinstance(reference, Vector):
+            ret = self.v.copy()
+            for i in xrange(len(indices)):
+                ret[indices[i]] -= reference.v[i]
+            return Vector(ret)
+        elif isinstance(reference, Angle):
+            ret = self.v.copy()
+            theta = reference.toRadians()
+            ret[indices[1]] = self.v[indices[1]]*cos(theta)-self.v[indices[0]]*sin(theta)
+            ret[indices[0]] = self.v[indices[0]]*cos(theta)+self.v[indices[1]]*sin(theta)
+            return Vector(ret)
+        else:
             raise TypeError('Argument must be a vector')
-        return Vector(self.v-reference.v)
 
     def __str__(self):
         return str(self.v)
