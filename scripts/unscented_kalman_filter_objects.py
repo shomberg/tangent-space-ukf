@@ -41,29 +41,8 @@ class unscentedKalmanFilter:
         self.syms = symmetries
 
 
-    def step(self, measurement, indices, command=None, W_0=.001):
-        """
-        #Sigma point selection
-        points = []
-        weights = [W_0] + [(1-W_0)/(2*self.mean.shape[0])]*(2*self.mean.shape[0])
-        points.append(self.mean)
-        root = matrix(real(linalg.sqrtm(self.mean.shape[0]/(1-W_0)*self.covar)))
-        for i in xrange(self.mean.shape[0]):
-            points.append(self.mean+root[i].getT())
-        for i in xrange(self.mean.shape[0]):
-            points.append(self.mean-root[i].getT())
-
-        #Time update
-        #Repack sigma points into objects
-        objectPoints = []
-        for p in points:
-            counter = 0
-            l = []
-            for i in xrange(len(self.dims)):
-                l.append(self.types[i].exp(p[counter:counter+self.dims[i],0],self.origins[i],self.bases[i]))
-                counter += self.dims[i]
-            objectPoints.append(l)
-        """
+    def step(self, measurement, indices, command=None, W_0=.001, scoreThresh=[None]):
+        #Select sigma points
         weights = [W_0] + [(1-W_0)/(2*self.mean.shape[0])]*(2*self.mean.shape[0])
         points = [self.mean]+self.selectSigmaPoints(self.mean, self.covar, W_0)
         objectPoints = self.packPoints(points, range(len(self.dims)), self.origins, self.bases)
@@ -195,7 +174,7 @@ class unscentedKalmanFilter:
 
             for i in xrange(len(measurement)):
                 if isinstance(measurement[i], list):
-                    ai = self.associateData(measurement[i], [mean_z_objects[j] for j in indices[i]], indices[i])
+                    ai = self.associateData(measurement[i], [mean_z_objects[j] for j in indices[i]], indices[i], scoreThresh[i%len(scoreThresh)])
                     if ai != None:
                         measurement_associated.extend(measurement[i])
                         indices_associated.extend(ai)
@@ -370,7 +349,7 @@ class unscentedKalmanFilter:
         return self.packPoints(self.selectSigmaPoints(mean, covar, W_0), indices, self.origins, self.bases)
 
     #returns list of indices in order of associated measurements
-    def associateData(self, measurement, measurement_forecast, indices):
+    def associateData(self, measurement, measurement_forecast, indices, scoreThreshold):
         #print "associating data"
         #for i in measurement:
         #    print i
@@ -390,7 +369,7 @@ class unscentedKalmanFilter:
                 if score < bestScore:
                     bestScore = score
                     bestIndex = indices[j]
-            if bestScore < 5:
+            if not scoreThreshold or bestScore < scoreThreshold:
                 ret.append(bestIndex)
                 used.append(bestIndex)
                 #print "assigned measurement", i, "to index", bestIndex
