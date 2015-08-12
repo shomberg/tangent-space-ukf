@@ -8,6 +8,7 @@ class Angle:
         if not abs(abs(r)-1) < .000001:
             raise ValueError('Argument must be unit')
         self.r = r
+        self.dim = 1
 
     @classmethod
     def exp(cls, v_t, r, basis):
@@ -54,6 +55,13 @@ class Angle:
         if not isinstance(reference, Angle):
             raise TypeError('Argument must be an angle')
         return Angle(self.r/reference.r)
+
+    def scoreEquals(self, other):
+        if isinstance(other, Angle):
+            r = self.r/other.r
+            return 1-r.real
+        else:
+            raise TypeError('Argument must be an angle')
 
     def __str__(self):
         return "Angle("+str(self.r)+")"

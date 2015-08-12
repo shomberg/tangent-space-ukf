@@ -11,6 +11,7 @@ class Angle3D:
         if not abs(r.mag()-1) < .000001:
             raise ValueError('Argument must be unit')
         self.r = r
+        self.dim = 3
 
     @classmethod
     def exp(cls, v_t, r, basis):
@@ -50,6 +51,18 @@ class Angle3D:
     def log(self, rSpace, basis, symmetry=None):
         k = rSpace.dot(rSpace)/(self.r.dot(rSpace))
         return basis.getI()*((k*self.r-rSpace).asVector())
+
+    def relative(self, reference):
+        if not isinstance(reference, Angle3D):
+            raise TypeError('Argument must be a 3d angle')
+        return Angle3D(self.r*reference.r.conj())
+
+    def scoreEquals(self, other):
+        if isinstance(other, Angle3D):
+            r = self.r*other.r.conj()
+            return 1-r.real
+        else:
+            raise TypeError('Argument must be a 3d angle')
 
     def __str__(self):
         return "Angle3D("+str(self.r)+")"

@@ -1,12 +1,13 @@
 from numpy import matrix, identity
 from angle import Angle
-from math import cos, sin
+from math import cos, sin, sqrt
 
 class Vector:
     def __init__(self, v):
         if not isinstance(v, matrix) or not v.shape[1] == 1:
             raise TypeError('Argument must be a vector')
         self.v = v
+        self.dim = len(v)
 
     @classmethod
     def exp(cls, v, o, basis):
@@ -41,6 +42,16 @@ class Vector:
             ret[indices[1]] = self.v[indices[1]]*cos(theta)-self.v[indices[0]]*sin(theta)
             ret[indices[0]] = self.v[indices[0]]*cos(theta)+self.v[indices[1]]*sin(theta)
             return Vector(ret)
+        else:
+            raise TypeError('Argument must be a vector')
+
+    def scoreEquals(self, other):
+        if isinstance(other, Vector):
+            s = 0
+            v = self.v-other.v
+            for i in v:
+                s += i*i
+            return sqrt(s)
         else:
             raise TypeError('Argument must be a vector')
 
