@@ -44,8 +44,8 @@ class unscentedKalmanFilter:
     def step(self, measurement, indices, command=None, W_0=.001, scoreThresh=[None]):
         #Select sigma points
         weights = [W_0] + [(1-W_0)/(2*self.mean.shape[0])]*(2*self.mean.shape[0])
-        points = [self.mean]+self.selectSigmaPoints(self.mean, self.covar, W_0)
-        objectPoints = self.packPoints(points, range(len(self.dims)), self.origins, self.bases)
+        points = [self.mean]+selectSigmaPoints(self.mean, self.covar, W_0)
+        objectPoints = packPoints(points, range(len(self.dims)), self.types, self.dims, self.origins, self.bases)
         
         #Apply unscented transformation
         state_forecast = []
@@ -86,12 +86,7 @@ class unscentedKalmanFilter:
 
         #Measurement update
         if len(measurement) > 0:
-            allIndices = []
-            for i in indices:
-                if isinstance(i, list):
-                    allIndices.extend(i)
-                else:
-                    allIndices.append(i)
+            allIndices = flatten_list(indices)
 
             #Predict measurements at forecast sigma points
             measurement_forecast = []
@@ -125,10 +120,12 @@ class unscentedKalmanFilter:
             #    print j
 
             #Find measurement dimensions
+            measurement_dims = []
             measurementCumDims = []
             current = 0
             first = True
             for o in measurement_forecast[0]:
+                measurement_dims.append(o.dim)
                 measurementCumDims.append(current)
                 current += o.dim
             measurementCumDims.append(current)
@@ -159,7 +156,7 @@ class unscentedKalmanFilter:
             #print covar_z
 
             #Repack mean z
-            mean_z_objects = self.packPoints([mean_z],range(len(measurement_forecast[0])),measurement_origins,measurement_bases)[0]
+            mean_z_objects = packPoints([mean_z],range(len(measurement_forecast[0])),measurement_types,measurement_dims,measurement_origins,measurement_bases)[0]
 
             #Associate data
             measurement_associated = []
@@ -174,7 +171,7 @@ class unscentedKalmanFilter:
 
             for i in xrange(len(measurement)):
                 if isinstance(measurement[i], list):
-                    ai = self.associateData(measurement[i], [mean_z_objects[j] for j in indices[i]], indices[i], scoreThresh[i%len(scoreThresh)])
+                    ai = associateData(measurement[i], [mean_z_objects[j] for j in indices[i]], indices[i], scoreThresh[i%len(scoreThresh)])
                     if ai != None:
                         measurement_associated.extend(measurement[i])
                         indices_associated.extend(ai)
@@ -235,7 +232,7 @@ class unscentedKalmanFilter:
             counter += self.dims[i]
         
         #Returns updated mean as list of objects
-        return (range(len(self.dims)), mRet, self.getPackedSigmaPoints(self.mean[0:self.stateDim], self.covar[0:self.stateDim,0:self.stateDim], range(len(self.dims))))
+        return (range(len(self.dims)), mRet, getPackedSigmaPoints(self.mean[0:self.stateDim], self.covar[0:self.stateDim,0:self.stateDim], range(len(self.dims)), self.types, self.dims, self.origins, self.bases))
 
     def sampleMarginalDistribution(self):
         sample = matrix(random.multivariate_normal(mean=self.mean[0:self.stateDim].getT().tolist()[0], cov=self.covar[0:self.stateDim,0:self.stateDim])).getT()
@@ -282,7 +279,7 @@ class unscentedKalmanFilter:
         for i in range(len(rest)):
             mRet.append(self.types[rest[i]].exp(mPrime[counter:counter+self.dims[rest[i]],0],self.origins[rest[i]],self.bases[rest[i]]))
             counter += self.dims[rest[i]]
-        return (rest, mRet, self.getPackedSigmaPoints(mPrime, sPrime, rest))
+        return (rest, mRet, getPackedSigmaPoints(mPrime, sPrime, rest, self.types, self.dims, self.origins, self.bases))
         
 
     def sampleConditionalDistribution(self, indices, values):
@@ -325,54 +322,63 @@ class unscentedKalmanFilter:
             counter += self.dims[i]
         return ret
 
-    def selectSigmaPoints(self, mean, covar, W_0=.001):
-        points = []
-        root = matrix(real(linalg.sqrtm(mean.shape[0]/(1-W_0)*covar)))
-        for i in xrange(mean.shape[0]):
-            points.append(mean+root[i].getT())
-        for i in xrange(mean.shape[0]):
-            points.append(mean-root[i].getT())
-        return points
+def selectSigmaPoints(mean, covar, W_0=.001):
+    points = []
+    root = matrix(real(linalg.sqrtm(mean.shape[0]/(1-W_0)*covar)))
+    for i in xrange(mean.shape[0]):
+        points.append(mean+root[i].getT())
+    for i in xrange(mean.shape[0]):
+        points.append(mean-root[i].getT())
+    return points
 
-    def packPoints(self, points, indices, origins, bases):
-        objectPoints = []
-        for p in points:
-            counter = 0
-            l = []
-            for i in indices:
-                l.append(self.types[i].exp(p[counter:counter+self.dims[i],0],origins[i],bases[i]))
-                counter += self.dims[i]
-            objectPoints.append(l)
-        return objectPoints
+def packPoints(points, indices, types, dims, origins, bases):
+    objectPoints = []
+    for p in points:
+        counter = 0
+        l = []
+        for i in indices:
+            l.append(types[i].exp(p[counter:counter+dims[i],0],origins[i],bases[i]))
+            counter += dims[i]
+        objectPoints.append(l)
+    return objectPoints
 
-    def getPackedSigmaPoints(self, mean, covar, indices, W_0=.001):
-        return self.packPoints(self.selectSigmaPoints(mean, covar, W_0), indices, self.origins, self.bases)
+def getPackedSigmaPoints(mean, covar, indices, types, dims, origins, bases, W_0=.001):
+    return packPoints(selectSigmaPoints(mean, covar, W_0), indices, types, dims, origins, bases)
 
-    #returns list of indices in order of associated measurements
-    def associateData(self, measurement, measurement_forecast, indices, scoreThreshold):
-        #print "associating data"
-        #for i in measurement:
-        #    print i
-        #for i in measurement_forecast:
-        #    print i
-        #print indices
-        ret = []
-        used = []
-        for i in xrange(len(measurement)):
-            bestScore = float("inf")
-            bestIndex = -1
-            for j in xrange(len(measurement_forecast)):
-                if indices[j] in used:
-                    continue
-                score = measurement[i].scoreEquals(measurement_forecast[j])
-                #print "measurement", i, "index", j, "score", score
-                if score < bestScore:
-                    bestScore = score
-                    bestIndex = indices[j]
-            if not scoreThreshold or bestScore < scoreThreshold:
-                ret.append(bestIndex)
-                used.append(bestIndex)
-                #print "assigned measurement", i, "to index", bestIndex
-            else:
-                return None
-        return ret
+#returns list of indices in order of associated measurements
+def associateData(measurement, measurement_forecast, indices, scoreThreshold):
+    #print "associating data"
+    #for i in measurement:
+    #    print i
+    #for i in measurement_forecast:
+    #    print i
+    #print indices
+    ret = []
+    used = []
+    for i in xrange(len(measurement)):
+        bestScore = float("inf")
+        bestIndex = -1
+        for j in xrange(len(measurement_forecast)):
+            if indices[j] in used:
+                continue
+            score = measurement[i].scoreEquals(measurement_forecast[j])
+            #print "measurement", i, "index", j, "score", score
+            if score < bestScore:
+                bestScore = score
+                bestIndex = indices[j]
+        if not scoreThreshold or bestScore < scoreThreshold:
+            ret.append(bestIndex)
+            used.append(bestIndex)
+            #print "assigned measurement", i, "to index", bestIndex
+        else:
+            return None
+    return ret
+
+def flatten_list(l):
+    ret = []
+    for i in l:
+        if isinstance(i, (list,tuple)):
+            ret.extend(flatten_list(i))
+        else:
+            ret.append(i)
+    return ret
