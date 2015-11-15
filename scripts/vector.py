@@ -10,25 +10,25 @@ class Vector:
         self.dim = len(v)
 
     @classmethod
-    def exp(cls, v, o, basis):
-        return Vector(basis*v+o)
+    def exp(cls, v, o):
+        return Vector(v+o)
 
     @classmethod
     def generateBasis(cls, o):
         return matrix(identity(o.shape[0]))
 
     def getCoordinates(self):
-        return self.v
-
-    def getOrigin(self):
         return matrix([[0]*self.v.shape[0]]).getT()
 
-    @classmethod
-    def normalizeOrigin(cls, o):
-        return o
+    def getOrigin(self):
+        return self.v
 
-    def log(self, o, basis, symmetry=None):
-        return basis.getI()*(self.v-o)
+    @classmethod
+    def normalizeOrigin(cls, v):
+        return v
+
+    def log(self, o, symmetry=None):
+        return self.v-o
 
     def relative(self, reference, indices):
         if isinstance(reference, Vector):

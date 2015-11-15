@@ -5,8 +5,8 @@ def add_noise(objects, noise):
     counter = 0
     ret = []
     for o in objects:
-        dim = o.getCoordinates().shape[0]
-        ret.append(o.__class__.exp(o.getCoordinates()+noise[counter:counter+dim,0], o.getOrigin(), o.__class__.generateBasis(o.getOrigin())))
+        dim = o.dim
+        ret.append(o.__class__.exp(noise[counter:counter+dim,0], o.getOrigin()))
         counter += dim
     return ret
 

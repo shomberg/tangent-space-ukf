@@ -11,7 +11,8 @@ class Angle:
         self.dim = 1
 
     @classmethod
-    def exp(cls, v_t, r, basis):
+    def exp(cls, v_t, r):
+        basis = Angle.generateBasis(r)
         c = r+complex(*(basis*v_t).getT().tolist()[0])
         return Angle(c/abs(c))
 
@@ -24,9 +25,6 @@ class Angle:
         c = complex(0,1)*r
         return matrix([[c.real],[c.imag]])
 
-    def getCoordinates(self):
-        return matrix([[0]])
-
     def getOrigin(self):
         return self.r
 
@@ -37,7 +35,8 @@ class Angle:
     def toRadians(self):
         return atan2(self.r.imag, self.r.real)
 
-    def log(self, rSpace, basis, symmetry=None):
+    def log(self, rSpace, symmetry=None):
+        basis = Angle.generateBasis(rSpace)
         rUse = self.r
         if symmetry:
             otherT = Angle(rSpace).toRadians()

@@ -10,19 +10,19 @@ import math
 from kalman_util import append_matrices
 
 class unscentedKalmanFilter:
-    def __init__(self, objects, covars, bases, f, h, symmetries, Q, R):
+    def __init__(self, objects, covars, f, h, symmetries, Q, R):
         #Unpack mean vector from objects
         self.mean = matrix([[]]).reshape((0,1))
         self.dims = []
         self.origins = []
         self.types = []
-        for o in objects:
-            self.mean = matrix(concatenate((self.mean, o.getCoordinates())))
-            self.dims.append(o.getCoordinates().shape[0])
+        for o in objects:         #track objects only, delete mean
+            self.mean = matrix(concatenate((self.mean, matrix([[0]*o.dim]).getT())))
+            self.dims.append(o.dim)
             self.origins.append(o.getOrigin())
             self.types.append(o.__class__)
         self.stateDim = self.mean.shape[0]
-        self.bases = bases
+        #self.bases = bases
         
         #Augmented state vector
         self.mean = matrix(concatenate((self.mean,zeros((Q.shape[0],1)),zeros((R.shape[0],1)))))
@@ -45,7 +45,7 @@ class unscentedKalmanFilter:
         #Select sigma points
         weights = [W_0] + [(1-W_0)/(2*self.mean.shape[0])]*(2*self.mean.shape[0])
         points = [self.mean]+selectSigmaPoints(self.mean, self.covar, W_0)
-        objectPoints = packPoints(points, range(len(self.dims)), self.types, self.dims, self.origins, self.bases)
+        objectPoints = packPoints(points, range(len(self.dims)), self.types, self.dims, self.origins)
         
         #Apply unscented transformation
         state_forecast = []
@@ -60,14 +60,14 @@ class unscentedKalmanFilter:
         #Normalize mean
         for j in xrange(len(self.origins)):
             self.origins[j] = self.types[j].normalizeOrigin(self.origins[j])
-            self.bases[j] = self.types[j].generateBasis(self.origins[j])
+            #self.bases[j] = self.types[j].generateBasis(self.origins[j])
         
         #Reproject
         state_forecast_projected = []
         for x in state_forecast:
             add = matrix([[]]).reshape((0,1))
             for i in xrange(len(x)):
-                add = matrix(concatenate((add,x[i].log(self.origins[i],self.bases[i]))))
+                add = matrix(concatenate((add,x[i].log(self.origins[i]))))
             state_forecast_projected.append(add)
 
         #Update mean with forecast from sigma points
@@ -92,7 +92,7 @@ class unscentedKalmanFilter:
             measurement_forecast = []
             for i in xrange(len(state_forecast)):
                 t = self.measurement_predict_function(state_forecast[i], points[i][self.stateDim+self.processNoiseDim:,0])
-                measurement_forecast.append(t)#[t[j] for j in allIndices])
+                measurement_forecast.append(t)
 
             #measurement_forecast = measurement_forecast_all
 
@@ -103,13 +103,13 @@ class unscentedKalmanFilter:
 
             #Calculate appropriate(mean) space for reprojection
             measurement_origins = [0]*len(measurement_forecast[0])
-            measurement_bases = [0]*len(measurement_forecast[0])
+            #measurement_bases = [0]*len(measurement_forecast[0])
             for i in xrange(len(measurement_forecast)):
                 for j in xrange(len(measurement_forecast[i])):
                     measurement_origins[j] += weights[i]*measurement_forecast[i][j].getOrigin()/len(measurement_forecast)
             for j in xrange(len(measurement_origins)):
                 measurement_origins[j] = measurement_types[j].normalizeOrigin(measurement_origins[j])
-                measurement_bases[j] = measurement_types[j].generateBasis(measurement_origins[j])
+                #measurement_bases[j] = measurement_types[j].generateBasis(measurement_origins[j])
             
             #print "origins"
             #print measurement_origins
@@ -137,7 +137,7 @@ class unscentedKalmanFilter:
             for x in measurement_forecast:
                 add = matrix([[]]).reshape((0,1))
                 for i in xrange(len(x)):
-                    add = matrix(concatenate((add,x[i].log(measurement_origins[i],measurement_bases[i]))))
+                    add = matrix(concatenate((add,x[i].log(measurement_origins[i]))))
                 measurement_forecast_projected.append(add)
 
             #Update measurement forecast mean and covariance
@@ -156,7 +156,7 @@ class unscentedKalmanFilter:
             #print covar_z
 
             #Repack mean z
-            mean_z_objects = packPoints([mean_z],range(len(measurement_forecast[0])),measurement_types,measurement_dims,measurement_origins,measurement_bases)[0]
+            mean_z_objects = packPoints([mean_z],range(len(measurement_forecast[0])),measurement_types,measurement_dims,measurement_origins)[0]
 
             #Associate data
             measurement_associated = []
@@ -206,7 +206,7 @@ class unscentedKalmanFilter:
             #Reproject Measurement
             measurement_projected = matrix([[]]).reshape((0,1))
             for i in xrange(len(measurement_associated)):
-                measurement_projected = matrix(concatenate((measurement_projected,measurement_associated[i].log(measurement_origins[indices_associated[i]],measurement_bases[indices_associated[i]],self.syms[indices_associated[i]]))))
+                measurement_projected = matrix(concatenate((measurement_projected,measurement_associated[i].log(measurement_origins[indices_associated[i]],self.syms[indices_associated[i]]))))
             #print "diff and gain:"
             #print measurement_projected
             #print (measurement_projected-mean_z)
@@ -228,11 +228,11 @@ class unscentedKalmanFilter:
         counter = 0
         mRet = []
         for i in xrange(len(self.dims)):
-            mRet.append(self.types[i].exp(self.mean[counter:counter+self.dims[i],0],self.origins[i],self.bases[i]))
+            mRet.append(self.types[i].exp(self.mean[counter:counter+self.dims[i],0],self.origins[i]))
             counter += self.dims[i]
         
         #Returns updated mean as list of objects
-        return (range(len(self.dims)), mRet, getPackedSigmaPoints(self.mean[0:self.stateDim], self.covar[0:self.stateDim,0:self.stateDim], range(len(self.dims)), self.types, self.dims, self.origins, self.bases))
+        return (range(len(self.dims)), mRet, getPackedSigmaPoints(self.mean[0:self.stateDim], self.covar[0:self.stateDim,0:self.stateDim], range(len(self.dims)), self.types, self.dims, self.origins))
 
     def sampleMarginalDistribution(self):
         sample = matrix(random.multivariate_normal(mean=self.mean[0:self.stateDim].getT().tolist()[0], cov=self.covar[0:self.stateDim,0:self.stateDim])).getT()
@@ -240,7 +240,7 @@ class unscentedKalmanFilter:
         counter = 0
         ret = []
         for i in xrange(len(self.dims)):
-            ret.append(self.types[i].exp(sample[counter:counter+self.dims[i]],self.origins[i],self.bases[i]))
+            ret.append(self.types[i].exp(sample[counter:counter+self.dims[i]],self.origins[i]))
             counter += self.dims[i]
         return ret
 
@@ -268,7 +268,7 @@ class unscentedKalmanFilter:
         #Project conditioned values
         value_projected = matrix([[]]).reshape((0,1))
         for i in xrange(len(values)):
-            value_projected = matrix(concatenate((value_projected,values[i].log(self.origins[indices[i]],self.bases[indices[i]]))))
+            value_projected = matrix(concatenate((value_projected,values[i].log(self.origins[indices[i]]))))
 
         #Calculate new mean
         mPrime = m1 + s12*s22.getI()*(value_projected-m2)
@@ -277,9 +277,9 @@ class unscentedKalmanFilter:
         counter = 0
         rest = list(set(range(len(self.dims)))-set(indices))
         for i in range(len(rest)):
-            mRet.append(self.types[rest[i]].exp(mPrime[counter:counter+self.dims[rest[i]],0],self.origins[rest[i]],self.bases[rest[i]]))
+            mRet.append(self.types[rest[i]].exp(mPrime[counter:counter+self.dims[rest[i]],0],self.origins[rest[i]]))
             counter += self.dims[rest[i]]
-        return (rest, mRet, getPackedSigmaPoints(mPrime, sPrime, rest, self.types, self.dims, self.origins, self.bases))
+        return (rest, mRet, getPackedSigmaPoints(mPrime, sPrime, rest, self.types, self.dims, self.origins))
         
 
     def sampleConditionalDistribution(self, indices, values):
@@ -306,7 +306,7 @@ class unscentedKalmanFilter:
         #Project conditioned values
         value_projected = matrix([[]]).reshape((0,1))
         for i in xrange(len(values)):
-            value_projected = matrix(concatenate((value_projected,values[i].log(self.origins[indices[i]],self.bases[indices[i]]))))
+            value_projected = matrix(concatenate((value_projected,values[i].log(self.origins[indices[i]]))))
 
         #Calculate new mean
         mPrime = m1 + s12*s22.getI()*(value_projected-m2)
@@ -318,7 +318,7 @@ class unscentedKalmanFilter:
         ret = []
         rest = list(set(range(len(self.dims)))-set(indices))
         for i in rest:
-            ret.append(self.types[i].exp(sample[counter:counter+self.dims[i]],self.origins[i],self.bases[i]))
+            ret.append(self.types[i].exp(sample[counter:counter+self.dims[i]],self.origins[i]))
             counter += self.dims[i]
         return ret
 
@@ -331,19 +331,19 @@ def selectSigmaPoints(mean, covar, W_0=.001):
         points.append(mean-root[i].getT())
     return points
 
-def packPoints(points, indices, types, dims, origins, bases):
+def packPoints(points, indices, types, dims, origins):
     objectPoints = []
     for p in points:
         counter = 0
         l = []
         for i in indices:
-            l.append(types[i].exp(p[counter:counter+dims[i],0],origins[i],bases[i]))
+            l.append(types[i].exp(p[counter:counter+dims[i],0],origins[i]))
             counter += dims[i]
         objectPoints.append(l)
     return objectPoints
 
-def getPackedSigmaPoints(mean, covar, indices, types, dims, origins, bases, W_0=.001):
-    return packPoints(selectSigmaPoints(mean, covar, W_0), indices, types, dims, origins, bases)
+def getPackedSigmaPoints(mean, covar, indices, types, dims, origins, W_0=.001):
+    return packPoints(selectSigmaPoints(mean, covar, W_0), indices, types, dims, origins)
 
 #returns list of indices in order of associated measurements
 def associateData(measurement, measurement_forecast, indices, scoreThreshold):

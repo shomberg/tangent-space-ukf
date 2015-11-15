@@ -14,7 +14,8 @@ class Angle3D:
         self.dim = 3
 
     @classmethod
-    def exp(cls, v_t, r, basis):
+    def exp(cls, v_t, r):
+        basis = Angle3D.generateBasis(r)
         return Angle3D((r+Quaternion(*((basis*v_t).getT().tolist()[0]))).normalize())
 
     @classmethod
@@ -23,9 +24,6 @@ class Angle3D:
         q2 = r*Quaternion(0,1,0,0)
         q3 = r*Quaternion(0,0,1,0)
         return concatenate((q1.asVector(),q2.asVector(),q3.asVector()),axis=1)
-
-    def getCoordinates(self):
-        return matrix([[0],[0],[0]])
 
     def getOrigin(self):
         return self.r
@@ -48,7 +46,8 @@ class Angle3D:
             raise ValueError('Axis must be nonzero')
         return Angle3D(Quaternion(*(sin(theta/2)*axis).getT().tolist()[0]+[cos(theta/2)]))
 
-    def log(self, rSpace, basis, symmetry=None):
+    def log(self, rSpace, symmetry=None):
+        basis = Angle3D.generateBasis(rSpace)
         k = rSpace.dot(rSpace)/(self.r.dot(rSpace))
         return basis.getI()*((k*self.r-rSpace).asVector())
 
