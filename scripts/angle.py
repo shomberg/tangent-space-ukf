@@ -1,5 +1,5 @@
 from numpy import matrix, conjugate
-from math import atan2, sin, cos, pi
+from math import atan2, sin, cos, pi, atan
 
 class Angle:
     def __init__(self, r):
@@ -12,9 +12,9 @@ class Angle:
 
     @classmethod
     def exp(cls, v_t, r):
-        basis = Angle.generateBasis(r)
-        c = r+complex(*(basis*v_t).getT().tolist()[0])
-        return Angle(c/abs(c))
+        theta = atan(v_t)
+        c = complex(cos(theta),sin(theta))*r
+        return Angle(c)
 
     @classmethod
     def fromRadians(cls, theta):
@@ -36,19 +36,18 @@ class Angle:
         return atan2(self.r.imag, self.r.real)
 
     def log(self, rSpace, symmetry=None):
-        basis = Angle.generateBasis(rSpace)
-        rUse = self.r
+        rUse = self.r/rSpace
         if symmetry:
             otherT = Angle(rSpace).toRadians()
             plus = (self.toRadians()-otherT)%(2*pi/symmetry)
             minus = plus-(2*pi/symmetry)
             if plus + minus > 0:
-                rUse = Angle.fromRadians(otherT+minus).r
+                rUse = Angle.fromRadians(minus).r
             else:
-                rUse = Angle.fromRadians(otherT+plus).r
-        k = (rSpace*conjugate(rSpace)).real/(rUse*conjugate(rSpace)).real
-        coord = k*rUse-rSpace
-        return basis.getI()*(matrix([[coord.real],[coord.imag]]))
+                rUse = Angle.fromRadians(plus).r
+        k = 1/rUse.real
+        coord = k*rUse
+        return matrix([[coord.imag]])
 
     def relative(self, reference):
         if not isinstance(reference, Angle):
