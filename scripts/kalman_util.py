@@ -1,12 +1,12 @@
 from numpy import concatenate, matrix, zeros
-
+from math import sqrt
 
 def add_noise(objects, noise):
     counter = 0
     ret = []
     for o in objects:
         dim = o.dim
-        ret.append(o.__class__.exp(noise[counter:counter+dim,0], o.getOrigin()))
+        ret.append(o.exp(noise[counter:counter+dim,0]))
         counter += dim
     return ret
 

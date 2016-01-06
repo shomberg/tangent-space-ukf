@@ -9,26 +9,18 @@ class Vector:
         self.v = v
         self.dim = len(v)
 
-    @classmethod
-    def exp(cls, v, o):
-        return Vector(v+o)
+    def exp(self, delta):
+        return Vector(self.v+delta)
 
     @classmethod
-    def generateBasis(cls, o):
-        return matrix(identity(o.shape[0]))
+    def calculateMean(cls, weights, vectors):
+        v_mean = 0
+        for i in range(len(vectors)):
+            v_mean += weights[i]*vectors[i].v
+        return Vector(v_mean)
 
-    def getCoordinates(self):
-        return matrix([[0]*self.v.shape[0]]).getT()
-
-    def getOrigin(self):
-        return self.v
-
-    @classmethod
-    def normalizeOrigin(cls, v):
-        return v
-
-    def log(self, o, symmetry=None):
-        return self.v-o
+    def log(self, other, symmetry=None):
+        return other.v-self.v
 
     def relative(self, reference, indices):
         if isinstance(reference, Vector):
@@ -43,7 +35,7 @@ class Vector:
             ret[indices[0]] = self.v[indices[0]]*cos(theta)+self.v[indices[1]]*sin(theta)
             return Vector(ret)
         else:
-            raise TypeError('Argument must be a vector')
+            raise TypeError('Argument must be a vector or angle')
 
     def scoreEquals(self, other):
         if isinstance(other, Vector):

@@ -1,5 +1,6 @@
 from numpy import matrix, concatenate
 from math import sin, cos, acos, sqrt
+from scipy.optimize import minimize
 
 
 from quaternion import Quaternion
@@ -13,24 +14,18 @@ class Angle3D:
         self.r = r
         self.dim = 3
 
-    @classmethod
-    def exp(cls, v_t, r):
-        basis = Angle3D.generateBasis(r)
-        return Angle3D((r+Quaternion(*((basis*v_t).getT().tolist()[0]))).normalize())
+    def exp(self, delta):
+        return Angle3D(Quaternion(self.r.i+delta[0],self.r.j+delta[1],self.r.k+delta[2],self.r.real).normalize())
+
+    def toVector(self):
+        return self.getRotation()*self.getAxis()
 
     @classmethod
-    def generateBasis(cls, r):
-        q1 = r*Quaternion(1,0,0,0)
-        q2 = r*Quaternion(0,1,0,0)
-        q3 = r*Quaternion(0,0,1,0)
-        return concatenate((q1.asVector(),q2.asVector(),q3.asVector()),axis=1)
-
-    def getOrigin(self):
-        return self.r
-
-    @classmethod
-    def normalizeOrigin(cls, r):
-        return r.normalize()
+    def calculateMean(cls, weights, angles):
+        r_mean = 0
+        for i in range(len(angles)):
+            r_mean += weights[i]*angles[i].r
+        return Angle3D(r_mean.normalize())
 
     def getRotation(self):
         return 2*acos(self.r.real)
@@ -46,10 +41,10 @@ class Angle3D:
             raise ValueError('Axis must be nonzero')
         return Angle3D(Quaternion(*(sin(theta/2)*axis).getT().tolist()[0]+[cos(theta/2)]))
 
-    def log(self, rSpace, symmetry=None):
-        basis = Angle3D.generateBasis(rSpace)
-        k = rSpace.dot(rSpace)/(self.r.dot(rSpace))
-        return basis.getI()*((k*self.r-rSpace).asVector())
+    def log(self, other, symmetry=None):
+        rUse = self.r
+        k = 1/rUse.real
+        return (k*rUse).asVector()[0:3]
 
     def relative(self, reference):
         if not isinstance(reference, Angle3D):

@@ -1,5 +1,6 @@
 from numpy import matrix, conjugate
 from math import atan2, sin, cos, pi, atan
+from scipy.optimize import minimize
 
 class Angle:
     def __init__(self, r):
@@ -10,36 +11,30 @@ class Angle:
         self.r = r
         self.dim = 1
 
-    @classmethod
-    def exp(cls, v_t, r):
-        theta = atan(v_t)
-        c = complex(cos(theta),sin(theta))*r
+    def exp(self, delta):
+        theta = atan(delta)
+        c = complex(cos(theta),sin(theta))*self.r
         return Angle(c)
 
     @classmethod
     def fromRadians(cls, theta):
         return Angle(complex(cos(theta),sin(theta)))
-    
-    @classmethod
-    def generateBasis(cls, r):
-        c = complex(0,1)*r
-        return matrix([[c.real],[c.imag]])
-
-    def getOrigin(self):
-        return self.r
 
     @classmethod
-    def normalizeOrigin(cls, r):
-        return r/abs(r)
+    def calculateMean(cls, weights, angles):
+        r_mean = 0
+        for i in range(len(angles)):
+            r_mean += weights[i]*angles[i].r
+        return Angle(r_mean/abs(r_mean))
 
     def toRadians(self):
         return atan2(self.r.imag, self.r.real)
 
-    def log(self, rSpace, symmetry=None):
-        rUse = self.r/rSpace
+    def log(self, other, symmetry=None):
+        rUse = other.r/self.r
         if symmetry:
-            otherT = Angle(rSpace).toRadians()
-            plus = (self.toRadians()-otherT)%(2*pi/symmetry)
+            otherT = other.toRadians()
+            plus = (otherT-self.toRadians())%(2*pi/symmetry)
             minus = plus-(2*pi/symmetry)
             if plus + minus > 0:
                 rUse = Angle.fromRadians(minus).r
