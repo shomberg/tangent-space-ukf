@@ -1,13 +1,13 @@
 from numpy import matrix, concatenate
 from math import sin, cos, acos, sqrt
 from scipy.optimize import minimize
-
+from kalman_util import magnitude
 
 from quaternion import Quaternion
 
 class Angle3D:
     def __init__(self, r):
-        if not isinstance(r, (int, float, long, Quaternion)):
+        if not isinstance(r, (Quaternion)):
             raise TypeError('Argument must be a quaternion')
         if not abs(r.mag()-1) < .000001:
             raise ValueError('Argument must be unit')
@@ -22,10 +22,16 @@ class Angle3D:
 
     @classmethod
     def calculateMean(cls, weights, angles):
-        r_mean = 0
-        for i in range(len(angles)):
-            r_mean += weights[i]*angles[i].r
-        return Angle3D(r_mean.normalize())
+        # constrained optimization problem of sum_i d(x_i,mu)^2 over mu in unit quaternion space
+        def sumDist(r):  # function to minimize
+            ret = 0
+            for i in range(len(angles)):
+                add = weights[i]*pow(magnitude(Angle3D(Quaternion(*r)/magnitude(r)).log(angles[i])),2)
+                ret += add
+            return ret
+
+        r_mean = minimize(sumDist, [angles[0].r.asVector()],constraints={'type': 'eq', 'fun': lambda r: magnitude(r)-1}).x
+        return Angle3D(Quaternion(*r_mean).normalize())
 
     def getRotation(self):
         return 2*acos(self.r.real)
@@ -42,7 +48,7 @@ class Angle3D:
         return Angle3D(Quaternion(*(sin(theta/2)*axis).getT().tolist()[0]+[cos(theta/2)]))
 
     def log(self, other, symmetry=None):
-        rUse = self.r
+        rUse = other.relative(self).r
         k = 1/rUse.real
         return (k*rUse).asVector()[0:3]
 

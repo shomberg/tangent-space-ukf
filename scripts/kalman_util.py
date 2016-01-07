@@ -1,6 +1,12 @@
 from numpy import concatenate, matrix, zeros
 from math import sqrt
 
+def magnitude(vector):
+    ret = 0
+    for i in vector:
+        ret += i*i
+    return sqrt(ret)
+
 def add_noise(objects, noise):
     counter = 0
     ret = []

@@ -1,6 +1,7 @@
 from numpy import matrix, conjugate
 from math import atan2, sin, cos, pi, atan
 from scipy.optimize import minimize
+from kalman_util import magnitude
 
 class Angle:
     def __init__(self, r):
@@ -22,10 +23,16 @@ class Angle:
 
     @classmethod
     def calculateMean(cls, weights, angles):
-        r_mean = 0
-        for i in range(len(angles)):
-            r_mean += weights[i]*angles[i].r
-        return Angle(r_mean/abs(r_mean))
+        # constrained optimization problem of sum_i d(x_i,mu)^2 over mu in unit complex space
+        def sumDist(r):  # function to minimize
+            ret = 0
+            for i in range(len(angles)):
+                add = weights[i]*pow(magnitude(Angle(complex(*r)/magnitude(r)).log(angles[i])),2)
+                ret += add
+            return ret
+        
+        r_mean = minimize(sumDist, [angles[0].r.real,angles[0].r.imag],constraints={'type': 'eq', 'fun': lambda r: magnitude(r)-1}).x
+        return Angle(complex(*r_mean)/magnitude(r_mean))
 
     def toRadians(self):
         return atan2(self.r.imag, self.r.real)
