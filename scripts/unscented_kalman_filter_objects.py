@@ -145,24 +145,28 @@ class unscentedKalmanFilter:
                     measurement_associated.append(measurement[i])
                     indices_associated.append(indices[i])
 
-            sliceIndices = []
+            slice_indices = []
+            associated_cum_dims = [0]
+            current = 0
             for i in indices_associated:
-                sliceIndices.extend(range(measurement_cum_dims[i],measurement_cum_dims[i+1]))
+                slice_indices.extend(range(measurement_cum_dims[i],measurement_cum_dims[i+1]))
+                current += measurement_cum_dims[i+1]-measurement_cum_dims[i]
+                associated_cum_dims.append(current)
 
-            mean_z = mean_z[array(sliceIndices)]
-            covar_z = covar_z[array(sliceIndices).reshape((len(sliceIndices),1)), array(sliceIndices)]
+            mean_z = mean_z[array(slice_indices)]
+            covar_z = covar_z[array(slice_indices).reshape((len(slice_indices),1)), array(slice_indices)]
                 
             #Calculate Kalman gain
             cross_covar = 0
             for i in xrange(len(measurement_forecast)):
-                cross_covar += weights[i]*((state_forecast_projected[i]-tangent_space_mean)*(measurement_forecast_projected[i][array(sliceIndices)]-mean_z).getT())
+                cross_covar += weights[i]*((state_forecast_projected[i]-tangent_space_mean)*(measurement_forecast_projected[i][array(slice_indices)]-mean_z).getT())
 
             gain = cross_covar * covar_z.getI()
 
             #Reproject Measurement
             measurement_projected = matrix([[]]).reshape((0,1))
             for i in xrange(len(measurement_associated)):
-                measurement_projected = matrix(concatenate((measurement_projected,measurement_means[indices_associated[i]].log(measurement_associated[i],self.syms[indices_associated[i]]))))
+                measurement_projected = matrix(concatenate((measurement_projected,measurement_means[indices_associated[i]].log(measurement_associated[i],(self.syms[indices_associated[i]],mean_z[associated_cum_dims[i]:associated_cum_dims[i+1]],covar_z[associated_cum_dims[i]:associated_cum_dims[i+1],associated_cum_dims[i]:associated_cum_dims[i+1]])))))
 
             tangent_space_mean = tangent_space_mean + gain*(measurement_projected-mean_z)
             

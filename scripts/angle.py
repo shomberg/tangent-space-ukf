@@ -2,6 +2,8 @@ from numpy import matrix, conjugate
 from math import atan2, sin, cos, pi, atan
 from scipy.optimize import minimize
 from kalman_util import magnitude
+from scipy.stats import multivariate_normal
+import pdb
 
 class Angle:
     def __init__(self, r):
@@ -13,9 +15,7 @@ class Angle:
         self.dim = 1
 
     def exp(self, delta):
-        theta = atan(delta)
-        c = complex(cos(theta),sin(theta))*self.r
-        return Angle(c)
+        return Angle.fromRadians(self.toRadians()+delta)
 
     @classmethod
     def fromRadians(cls, theta):
@@ -38,19 +38,20 @@ class Angle:
         return atan2(self.r.imag, self.r.real)
 
     def log(self, other, symmetry=None):
-        rUse = other.r/self.r
-        if symmetry:
-            otherT = other.toRadians()
-            plus = (otherT-self.toRadians())%(2*pi/symmetry)
-            minus = plus-(2*pi/symmetry)
-            if plus + minus > 0:
-                rUse = Angle.fromRadians(minus).r
-            else:
-                rUse = Angle.fromRadians(plus).r
-        k = 1/rUse.real
-        coord = k*rUse
-        return matrix([[coord.imag]])
-
+        if symmetry and symmetry[0]:
+            base = other.toRadians()-self.toRadians()
+            bestRot = None
+            bestProb = -1
+            for i in range(0,symmetry[0]):
+                rotation = matrix([[base + (i*2*pi/symmetry[0])]])
+                probability = multivariate_normal.pdf(rotation,mean=symmetry[1],cov=symmetry[2])
+                if probability > bestProb:
+                    bestRot = rotation
+                    bestProb = probability
+            return bestRot
+        else:
+            return matrix([[other.toRadians()-self.toRadians()]])
+        
     def relative(self, reference):
         if not isinstance(reference, Angle):
             raise TypeError('Argument must be an angle')

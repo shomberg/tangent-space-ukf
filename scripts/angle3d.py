@@ -2,6 +2,7 @@ from numpy import matrix, concatenate
 from math import sin, cos, acos, sqrt
 from scipy.optimize import minimize
 from kalman_util import magnitude
+import pdb
 
 from quaternion import Quaternion
 
@@ -11,11 +12,13 @@ class Angle3D:
             raise TypeError('Argument must be a quaternion')
         if not abs(r.mag()-1) < .000001:
             raise ValueError('Argument must be unit')
-        self.r = r
+        self.r = r.normalize()
         self.dim = 3
 
     def exp(self, delta):
-        return Angle3D(Quaternion(self.r.i+delta[0],self.r.j+delta[1],self.r.k+delta[2],self.r.real).normalize())
+        #pdb.set_trace()
+        v = self.toVector()+delta
+        return Angle3D.fromRotationAxis(magnitude(v),v/magnitude(v))
 
     def toVector(self):
         return self.getRotation()*self.getAxis()
@@ -44,13 +47,26 @@ class Angle3D:
     @classmethod
     def fromRotationAxis(cls, theta, axis):
         if not abs(sqrt(axis[0,0]**2+axis[1,0]**2+axis[2,0]**2)-1)<.000001:
-            raise ValueError('Axis must be nonzero')
+            print theta, axis
+            raise ValueError('Axis must be unit')
         return Angle3D(Quaternion(*(sin(theta/2)*axis).getT().tolist()[0]+[cos(theta/2)]))
 
     def log(self, other, symmetry=None):
-        rUse = other.relative(self).r
-        k = 1/rUse.real
-        return (k*rUse).asVector()[0:3]
+        if symmetry and symmetry[0]:
+            given = other.relative(self)
+            base = given.getRotation()
+            axis = given.getAxis()
+            bestRot = None
+            bestProb = -1
+            for i in range(0,symmetry[0]):
+                rotation = Angle3D.fromRotationAxis(base+i*2*pi/symmetry[0],axis).toVector()
+                probability = multivariate_normal.pdf(rotation,mean=symmetry[1],cov=symmetry[2])
+                if probability > bestProb:
+                    bestRot = rotation
+                    bestProb = probability
+            return bestRot
+        else:
+            return other.relative(self).toVector()
 
     def relative(self, reference):
         if not isinstance(reference, Angle3D):
