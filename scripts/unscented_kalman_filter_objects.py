@@ -134,7 +134,7 @@ class unscentedKalmanFilter:
 
             for i in xrange(len(measurement)):
                 if isinstance(measurement[i], list):
-                    ai = associateData(measurement[i], [mean_z_objects[j] for j in indices[i]], indices[i], scoreThresh[i%len(scoreThresh)])
+                    ai = associateData(measurement[i], [(measurement_means[j],mean_z[measurement_cum_dims[j]:measurement_cum_dims[j+1]],covar_z[measurement_cum_dims[j]:measurement_cum_dims[j+1],measurement_cum_dims[j]:measurement_cum_dims[j+1]]) for j in indices[i]], indices[i], scoreThresh[i%len(scoreThresh)])
                     if ai != None:
                         measurement_associated.extend(measurement[i])
                         indices_associated.extend(ai)
@@ -144,6 +144,8 @@ class unscentedKalmanFilter:
                 else:
                     measurement_associated.append(measurement[i])
                     indices_associated.append(indices[i])
+
+            #pdb.set_trace()
 
             slice_indices = []
             associated_cum_dims = [0]
@@ -303,19 +305,20 @@ def getPackedSigmaPoints(mean, covar, indices, types, dims, W_0=.001):
 
 #returns list of indices in order of associated measurements
 def associateData(measurement, measurement_forecast, indices, scoreThreshold):
+    #pdb.set_trace()
     ret = []
     used = []
     for i in xrange(len(measurement)):
-        bestScore = float("inf")
+        bestScore = float("-inf")
         bestIndex = -1
         for j in xrange(len(measurement_forecast)):
             if indices[j] in used:
                 continue
-            score = measurement[i].scoreEquals(measurement_forecast[j])
-            if score < bestScore:
+            score = measurement[i].scoreEquals(*measurement_forecast[j])
+            if score > bestScore:
                 bestScore = score
                 bestIndex = indices[j]
-        if not scoreThreshold or bestScore < scoreThreshold:
+        if not scoreThreshold or bestScore > scoreThreshold:
             ret.append(bestIndex)
             used.append(bestIndex)
         else:

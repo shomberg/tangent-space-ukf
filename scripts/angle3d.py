@@ -73,10 +73,9 @@ class Angle3D:
             raise TypeError('Argument must be a 3d angle')
         return Angle3D(self.r*reference.r.conj())
 
-    def scoreEquals(self, other):
+    def scoreEquals(self, other, mean, covar):
         if isinstance(other, Angle3D):
-            r = self.r*other.r.conj()
-            return 1-r.real
+            return multivariate_normal.pdf(self.log(other).getT().tolist()[0],mean.getT().tolist()[0],covar)
         else:
             raise TypeError('Argument must be a 3d angle')
 

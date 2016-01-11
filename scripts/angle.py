@@ -57,10 +57,9 @@ class Angle:
             raise TypeError('Argument must be an angle')
         return Angle(self.r/reference.r)
 
-    def scoreEquals(self, other):
+    def scoreEquals(self, other, mean, covar):
         if isinstance(other, Angle):
-            r = self.r/other.r
-            return 1-r.real
+            return multivariate_normal.pdf(self.log(other),mean,covar)
         else:
             raise TypeError('Argument must be an angle')
 

@@ -1,6 +1,7 @@
 from numpy import matrix, identity
 from angle import Angle
 from math import cos, sin, sqrt
+from scipy.stats import multivariate_normal
 
 class Vector:
     def __init__(self, v):
@@ -37,13 +38,9 @@ class Vector:
         else:
             raise TypeError('Argument must be a vector or angle')
 
-    def scoreEquals(self, other):
+    def scoreEquals(self, other, mean, covar):
         if isinstance(other, Vector):
-            s = 0
-            v = self.v-other.v
-            for i in v:
-                s += i*i
-            return sqrt(s)
+            return multivariate_normal.pdf(self.log(other).getT().tolist()[0],mean.getT().tolist()[0],covar)
         else:
             raise TypeError('Argument must be a vector')
 
