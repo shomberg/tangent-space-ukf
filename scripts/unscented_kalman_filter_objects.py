@@ -19,16 +19,16 @@ class unscentedKalmanFilter:
         self.origins = []
         self.types = []
         self.mean = mean
-        self.stateDim = 0
+        self.state_dim = 0
         for o in mean:
             self.dims.append(o.dim)
-            self.stateDim += o.dim
+            self.state_dim += o.dim
             self.types.append(o.__class__)
 
         #Dimension of each portion of the augmentation
-        self.processNoiseDim = Q.shape[0]
-        self.measurementNoiseDim = R.shape[0]
-        self.dim = self.stateDim + self.processNoiseDim + self.measurementNoiseDim
+        self.process_noise_dim = Q.shape[0]
+        self.measurement_noise_dim = R.shape[0]
+        self.dim = self.state_dim + self.process_noise_dim + self.measurement_noise_dim
         
         #Unpack covariances for diagonal from objects
         self.covar = append_matrices(covars)
@@ -43,13 +43,13 @@ class unscentedKalmanFilter:
     def step(self, measurement, indices, command=None, W_0=.001, scoreThresh=[None]):
         #Select sigma points
         weights = [W_0] + [(1-W_0)/(2*self.dim)]*(2*self.dim)
-        deltas = selectSigmaPoints(self.covar, W_0)
-        objectPoints = packPoints(self.mean, deltas, range(len(self.dims)), self.types, self.dims)
+        deltas = selectSigmaPoints(matrix(zeros((self.covar.shape[0],1))),self.covar, W_0)
+        object_points = packPoints(self.mean, deltas, range(len(self.dims)), self.types, self.dims)
         
         #Apply unscented transformation
         state_forecast = []
-        for i in xrange(len(objectPoints)):
-            state_forecast.append(self.update_function(command, objectPoints[i],deltas[i][self.stateDim:self.stateDim+self.processNoiseDim,0]))
+        for i in xrange(len(object_points)):
+            state_forecast.append(self.update_function(command, object_points[i],deltas[i][self.state_dim:self.state_dim+self.process_noise_dim,0]))
 
         #Calculate appropriate(mean) space for reprojection
         forecast_mean = []
@@ -65,7 +65,7 @@ class unscentedKalmanFilter:
             state_forecast_projected.append(add)
 
         #Augmented state vector
-        tangent_space_mean = matrix(zeros((self.stateDim,1)))
+        tangent_space_mean = matrix(zeros((self.state_dim,1)))
 
         #Update mean with forecast from sigma points
         for i in xrange(len(state_forecast_projected)):
@@ -83,7 +83,7 @@ class unscentedKalmanFilter:
             #Predict measurements at forecast sigma points
             measurement_forecast = []
             for i in xrange(len(state_forecast)):
-                t = self.measurement_predict_function(state_forecast[i], deltas[i][self.stateDim+self.processNoiseDim:,0])
+                t = self.measurement_predict_function(state_forecast[i], deltas[i][self.state_dim+self.process_noise_dim:,0])
                 measurement_forecast.append(t)
 
             measurement_types = []
@@ -145,8 +145,6 @@ class unscentedKalmanFilter:
                     measurement_associated.append(measurement[i])
                     indices_associated.append(indices[i])
 
-            #pdb.set_trace()
-
             slice_indices = []
             associated_cum_dims = [0]
             current = 0
@@ -183,129 +181,106 @@ class unscentedKalmanFilter:
         
     def getMarginalDistribution(self):
         #Pack in order to return
-        counter = 0
-        mRet = []
-        for i in xrange(len(self.dims)):
-            mRet.append(self.types[i].exp(self.mean[counter:counter+self.dims[i],0],self.origins[i]))
-            counter += self.dims[i]
-        
-        #Returns updated mean as list of objects
-        return (range(len(self.dims)), mRet, getPackedSigmaPoints(self.mean[0:self.stateDim], self.covar[0:self.stateDim,0:self.stateDim], range(len(self.dims)), self.types, self.dims, self.origins))
+        return (range(len(self.dims)), getPackedSigmaPoints(self.mean, matrix(zeros((self.state_dim,1))), self.covar[0:self.state_dim,0:self.state_dim], range(len(self.dims)), self.types, self.dims))
 
     def sampleMarginalDistribution(self):
-        sample = matrix(random.multivariate_normal(mean=self.mean[0:self.stateDim].getT().tolist()[0], cov=self.covar[0:self.stateDim,0:self.stateDim])).getT()
+        sample = matrix(random.multivariate_normal(zeros((self.state_dim)), cov=self.covar[0:self.state_dim,0:self.state_dim])).getT()
+        
         #Pack in order to return
-        counter = 0
-        ret = []
-        for i in xrange(len(self.dims)):
-            ret.append(self.types[i].exp(sample[counter:counter+self.dims[i]],self.origins[i]))
-            counter += self.dims[i]
-        return ret
+        return packPoints(self.mean, [sample], range(len(self.dims)), self.types, self.dims)[0]
 
     def getConditionalDistribution(self, indices, values):
         #Calculate cumulative indices in the mean vector
         counter = 0
-        cumIndices = []
+        cum_indices = []
         for i in range(len(self.dims)):
             if i in indices:
-                for j in range(counter,counter+self.dims[i]):
-                    cumIndices.append(j)
+                cum_indices.extend(range(counter,counter+self.dims[i]))
             counter += self.dims[i]
 
         #Mask with newly calculated indices
-        stateMask = ones(self.stateDim,dtype=bool)
-        stateMask[cumIndices] = False
-        conditionMask = logical_not(stateMask)
-        s11 = self.covar[stateMask][:,stateMask]
-        s12 = self.covar[stateMask][:,conditionMask]
-        s21 = self.covar[conditionMask][:,stateMask]
-        s22 = self.covar[conditionMask][:,conditionMask]
-        m1 = self.mean[stateMask]
-        m2 = self.mean[conditionMask]
+        state_mask = ones(self.state_dim,dtype=bool)
+        state_mask[cum_indices] = False
+        condition_mask = logical_not(state_mask)
+        s11 = self.covar[state_mask][:,state_mask]
+        s12 = self.covar[state_mask][:,condition_mask]
+        s21 = self.covar[condition_mask][:,state_mask]
+        s22 = self.covar[condition_mask][:,condition_mask]
+        m1 = zeros((sum(state_mask),1))
+        m2 = zeros((sum(condition_mask),1))
 
         #Project conditioned values
         value_projected = matrix([[]]).reshape((0,1))
         for i in xrange(len(values)):
-            value_projected = matrix(concatenate((value_projected,values[i].log(self.origins[indices[i]]))))
+            value_projected = matrix(concatenate((value_projected,self.mean[indices[i]].log(values[i]))))
 
         #Calculate new mean
-        mPrime = m1 + s12*s22.getI()*(value_projected-m2)
-        sPrime = s11 - s12*s22.getI()*s21
-        mRet = []
-        counter = 0
+        m_prime = m1 + s12*s22.getI()*(value_projected-m2)
+        s_prime = s11 - s12*s22.getI()*s21
         rest = list(set(range(len(self.dims)))-set(indices))
-        for i in range(len(rest)):
-            mRet.append(self.types[rest[i]].exp(mPrime[counter:counter+self.dims[rest[i]],0],self.origins[rest[i]]))
-            counter += self.dims[rest[i]]
-        return (rest, mRet, getPackedSigmaPoints(mPrime, sPrime, rest, self.types, self.dims, self.origins))
+        return (rest, getPackedSigmaPoints(self.mean, m_prime, s_prime, rest, self.types, self.dims))
         
 
     def sampleConditionalDistribution(self, indices, values):
         #Calculate cumulative indices in the mean vector
         counter = 0
-        cumIndices = []
+        cum_indices = []
         for i in range(len(self.dims)):
             if i in indices:
                 for j in range(counter,counter+self.dims[i]):
-                    cumIndices.append(j)
+                    cum_indices.append(j)
             counter += self.dims[i]
 
         #Mask with newly calculated indices
-        stateMask = ones(self.stateDim,dtype=bool)
-        stateMask[cumIndices] = False
-        conditionMask = logical_not(stateMask)
-        s11 = self.covar[stateMask][:,stateMask]
-        s12 = self.covar[stateMask][:,conditionMask]
-        s21 = self.covar[conditionMask][:,stateMask]
-        s22 = self.covar[conditionMask][:,conditionMask]
-        m1 = self.mean[stateMask]
-        m2 = self.mean[conditionMask]
+        state_mask = ones(self.state_dim,dtype=bool)
+        state_mask[cum_indices] = False
+        condition_mask = logical_not(state_mask)
+        s11 = self.covar[state_mask][:,state_mask]
+        s12 = self.covar[state_mask][:,condition_mask]
+        s21 = self.covar[condition_mask][:,state_mask]
+        s22 = self.covar[condition_mask][:,condition_mask]
+        m1 = zeros((sum(state_mask),1))
+        m2 = zeros((sum(condition_mask),1))
 
         #Project conditioned values
         value_projected = matrix([[]]).reshape((0,1))
         for i in xrange(len(values)):
-            value_projected = matrix(concatenate((value_projected,values[i].log(self.origins[indices[i]]))))
+            value_projected = matrix(concatenate((value_projected,self.mean[indices[i]].log(values[i]))))
 
         #Calculate new mean
-        mPrime = m1 + s12*s22.getI()*(value_projected-m2)
-        sPrime = s11 - s12*s22.getI()*s21
+        m_prime = m1 + s12*s22.getI()*(value_projected-m2)
+        s_prime = s11 - s12*s22.getI()*s21
+        sample = matrix(random.multivariate_normal(mean=m_prime.getT().tolist()[0], cov=s_prime)).getT()
 
-        sample = matrix(random.multivariate_normal(mean=mPrime.getT().tolist()[0], cov=sPrime[0:self.stateDim,0:self.stateDim])).getT()
         #Pack in order to return
-        counter = 0
-        ret = []
         rest = list(set(range(len(self.dims)))-set(indices))
-        for i in rest:
-            ret.append(self.types[i].exp(sample[counter:counter+self.dims[i]],self.origins[i]))
-            counter += self.dims[i]
-        return ret
+        return packPoints(self.mean, [sample], rest, self.types, self.dims)[0]
 
-def selectSigmaPoints(covar, W_0=.001):
-    deltas = [matrix(zeros((covar.shape[0],1)))]
+def selectSigmaPoints(delta, covar, W_0=.001):
+    deltas = [delta]
     root = matrix(real(linalg.sqrtm(covar.shape[0]/(1-W_0)*covar)))
     for i in xrange(covar.shape[0]):
-        deltas.append(root[i].getT())
+        deltas.append(delta+root[i].getT())
     for i in xrange(covar.shape[0]):
-        deltas.append(-root[i].getT())
+        deltas.append(delta-root[i].getT())
     return deltas
 
 def packPoints(mean, deltas, indices, types, dims):
-    objectPoints = []
+    object_points = []
     for d in deltas:
         counter = 0
         l = []
         for i in indices:
             l.append(mean[i].exp(d[counter:counter+dims[i]]))
             counter += dims[i]
-        objectPoints.append(l)
-    return objectPoints
+        object_points.append(l)
+    return object_points
 
-def getPackedSigmaPoints(mean, covar, indices, types, dims, W_0=.001):
-    return packPoints(mean, selectSigmaPoints(covar, W_0), indices, types, dims)
+def getPackedSigmaPoints(mean, delta, covar, indices, types, dims, W_0=.001):
+    return packPoints(mean, selectSigmaPoints(delta, covar, W_0), indices, types, dims)
 
 #returns list of indices in order of associated measurements
 def associateData(measurement, measurement_forecast, indices, scoreThreshold):
-    #pdb.set_trace()
     ret = []
     used = []
     for i in xrange(len(measurement)):
