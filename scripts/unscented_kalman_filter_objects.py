@@ -39,7 +39,6 @@ class unscentedKalmanFilter:
         self.measurement_predict_function = h
         self.syms = symmetries
 
-
     def step(self, measurement, indices, command=None, W_0=.001, scoreThresh=[None]):
         #Select sigma points
         weights = [W_0] + [(1-W_0)/(2*self.dim)]*(2*self.dim)
@@ -258,12 +257,37 @@ class unscentedKalmanFilter:
 
 def selectSigmaPoints(delta, covar, W_0=.001):
     deltas = [delta]
+    covar = fixSigma(covar)
     root = matrix(real(linalg.sqrtm(covar.shape[0]/(1-W_0)*covar)))
     for i in xrange(covar.shape[0]):
         deltas.append(delta+root[i].getT())
     for i in xrange(covar.shape[0]):
         deltas.append(delta-root[i].getT())
     return deltas
+
+def fixSigma(sigma, ridge = 0):
+    # Can pass in ridge > 0 to ensure minimum eigenvalue is always >= ridge
+    good = True
+    for i in range(len(sigma)):
+        for j in range(i):
+            if sigma[i, j] != sigma[j, i]:
+                #print 'found asymmetry mag:', abs(sigma[i, j] - sigma[j, i])
+                good = False
+    if not good:
+        sigma = (sigma + sigma.T) / 2
+
+    eigs = linalg.eigvalsh(sigma)
+    if any([isinstance(e, complex) for e in eigs]):
+        print eigs
+        print '** Symmetric, but complex eigs **'
+    minEig = min(eigs)
+    if minEig < 0:
+        raw_input('** Not positive definite **'+str(minEig))
+    elif minEig < ridge:
+        print '** Adding ridge', ridge, 'because minEig is', minEig, '**'
+    if minEig < ridge:
+        sigma = sigma + 2 * (ridge - minEig) * identity(len(sigma))
+    return sigma
 
 def packPoints(mean, deltas, indices, types, dims):
     object_points = []
