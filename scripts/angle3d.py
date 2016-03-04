@@ -16,9 +16,11 @@ class Angle3D:
         self.dim = 3
 
     def exp(self, delta):
-        #pdb.set_trace()
-        v = self.toVector()+delta
-        return Angle3D.fromRotationAxis(magnitude(v),v/magnitude(v))
+        if(magnitude(delta)==0):
+            other = Angle3D(Quaternion(0,0,0,1))
+        else:
+            other = Angle3D.fromRotationAxis(magnitude(delta),delta/magnitude(delta))
+        return Angle3D(other.r*self.r)
 
     def toVector(self):
         return self.getRotation()*self.getAxis()

@@ -4,15 +4,16 @@ General (augmented state) Unscented Kalman Filter implementation for composition
 
 """
 
-from numpy import array, matrix, concatenate, zeros, ones, logical_not, random, around, real, transpose
+from numpy import array, matrix, concatenate, zeros, ones, logical_not, random, around, real, transpose, identity
 from scipy import linalg
 import math
 from kalman_util import append_matrices
 import pdb
 
-class unscentedKalmanFilter:
-    def __init__(self, mean, covars, f, h, symmetries, Q, R):
-        self.version = 1
+class UnscentedKalmanFilter:
+    def __init__(self, mean, covars, f, h, symmetries, Q, R, new):
+        self.new = new
+        self.version = 2
         #Unpack mean vector from objects
         self.mean = matrix([[]]).reshape((0,1))
         self.dims = []
@@ -39,7 +40,7 @@ class unscentedKalmanFilter:
         self.measurement_predict_function = h
         self.syms = symmetries
 
-    def step(self, measurement, indices, command=None, W_0=.001, scoreThresh=[None]):
+    def stateUpdate(self, command=None, W_0=.001):
         #Select sigma points
         weights = [W_0] + [(1-W_0)/(2*self.dim)]*(2*self.dim)
         deltas = selectSigmaPoints(matrix(zeros((self.covar.shape[0],1))),self.covar, W_0)
@@ -75,109 +76,118 @@ class unscentedKalmanFilter:
             deviation = state_forecast_projected[i]-tangent_space_mean
             covar_state += weights[i]*(deviation*deviation.getT())
 
-        #Measurement update
-        if len(measurement) > 0:
-            allIndices = flatten_list(indices)
-
-            #Predict measurements at forecast sigma points
-            measurement_forecast = []
-            for i in xrange(len(state_forecast)):
-                t = self.measurement_predict_function(state_forecast[i], deltas[i][self.state_dim+self.process_noise_dim:,0])
-                measurement_forecast.append(t)
-
-            measurement_types = []
-            for m in measurement_forecast[0]:
-                measurement_types.append(m.__class__)
-
-            #Calculate appropriate(mean) space for reprojection
-            measurement_means = []
-            for i in range(len(measurement_types)):
-                measurement_means.append(measurement_types[i].calculateMean(weights, [measurement_forecast[j][i] for j in range(len(measurement_forecast))]))
-
-            #Find measurement dimensions
-            measurement_dims = []
-            measurement_cum_dims = []
-            current = 0
-            first = True
-            for o in measurement_forecast[0]:
-                measurement_dims.append(o.dim)
-                measurement_cum_dims.append(current)
-                current += o.dim
-
-            measurement_cum_dims.append(current)
-
-            #Reproject
-            measurement_forecast_projected = []
-            for x in measurement_forecast:
-                add = matrix([[]]).reshape((0,1))
-                for i in xrange(len(x)):
-                    add = matrix(concatenate((add,measurement_means[i].log(x[i]))))
-                measurement_forecast_projected.append(add)
-
-            #Update measurement forecast mean and covariance
-            mean_z = 0
-            for i in xrange(len(measurement_forecast_projected)):
-                mean_z += weights[i]*measurement_forecast_projected[i]
-
-            covar_z = 0
-            for i in xrange(len(measurement_forecast)):
-                deviation = measurement_forecast_projected[i]-mean_z
-                covar_z += weights[i]*(deviation*deviation.getT())
-
-            #Repack mean z
-            mean_z_objects = packPoints(measurement_means,[mean_z],range(len(measurement_forecast[0])),measurement_types,measurement_dims)[0]
-
-            #Associate data
-            measurement_associated = []
-            indices_associated = []
-
-            for i in xrange(len(measurement)):
-                if isinstance(measurement[i], list):
-                    ai = associateData(measurement[i], [(measurement_means[j],mean_z[measurement_cum_dims[j]:measurement_cum_dims[j+1]],covar_z[measurement_cum_dims[j]:measurement_cum_dims[j+1],measurement_cum_dims[j]:measurement_cum_dims[j+1]]) for j in indices[i]], indices[i], scoreThresh[i%len(scoreThresh)])
-                    if ai != None:
-                        measurement_associated.extend(measurement[i])
-                        indices_associated.extend(ai)
-                    else:
-                        #association error
-                        raise Exception("Error associating measurements")
-                else:
-                    measurement_associated.append(measurement[i])
-                    indices_associated.append(indices[i])
-
-            slice_indices = []
-            associated_cum_dims = [0]
-            current = 0
-            for i in indices_associated:
-                slice_indices.extend(range(measurement_cum_dims[i],measurement_cum_dims[i+1]))
-                current += measurement_cum_dims[i+1]-measurement_cum_dims[i]
-                associated_cum_dims.append(current)
-
-            mean_z = mean_z[array(slice_indices)]
-            covar_z = covar_z[array(slice_indices).reshape((len(slice_indices),1)), array(slice_indices)]
-                
-            #Calculate Kalman gain
-            cross_covar = 0
-            for i in xrange(len(measurement_forecast)):
-                cross_covar += weights[i]*((state_forecast_projected[i]-tangent_space_mean)*(measurement_forecast_projected[i][array(slice_indices)]-mean_z).getT())
-
-            gain = cross_covar * covar_z.getI()
-
-            #Reproject Measurement
-            measurement_projected = matrix([[]]).reshape((0,1))
-            for i in xrange(len(measurement_associated)):
-                measurement_projected = matrix(concatenate((measurement_projected,measurement_means[indices_associated[i]].log(measurement_associated[i],(self.syms[indices_associated[i]],mean_z[associated_cum_dims[i]:associated_cum_dims[i+1]],covar_z[associated_cum_dims[i]:associated_cum_dims[i+1],associated_cum_dims[i]:associated_cum_dims[i+1]])))))
-
-            tangent_space_mean = tangent_space_mean + gain*(measurement_projected-mean_z)
-            
-            #Update covariance
-            covar_state = covar_state - gain*covar_z*gain.getT()
-
-        #Measurement-corrected updates to mean and covariance
-
         self.mean = packPoints(forecast_mean, [tangent_space_mean], range(len(forecast_mean)), self.types, self.dims)[0]
 
         self.covar[0:covar_state.shape[0],0:covar_state.shape[1]] = covar_state
         
+
+    def measurementUpdate(self, measurement, indices, W_0=.001, scoreThresh=[None]):
+        #Select sigma points
+        weights = [W_0] + [(1-W_0)/(2*self.dim)]*(2*self.dim)
+        deltas = selectSigmaPoints(matrix(zeros((self.covar.shape[0],1))),self.covar, W_0)
+        object_points = packPoints(self.mean, deltas, range(len(self.dims)), self.types, self.dims)
+
+        allIndices = flatten_list(indices)
+
+        #Predict measurements at forecast sigma points
+        measurement_forecast = []
+        for i in xrange(len(object_points)):
+            t = self.measurement_predict_function(object_points[i], deltas[i][self.state_dim+self.process_noise_dim:,0])
+            measurement_forecast.append(t)
+
+        measurement_types = []
+        for m in measurement_forecast[0]:
+            measurement_types.append(m.__class__)
+
+        #Calculate appropriate(mean) space for reprojection
+        measurement_means = []
+        for i in range(len(measurement_types)):
+            measurement_means.append(measurement_types[i].calculateMean(weights, [measurement_forecast[j][i] for j in range(len(measurement_forecast))]))
+
+        #Find measurement dimensions
+        measurement_dims = []
+        measurement_cum_dims = []
+        current = 0
+        first = True
+        for o in measurement_forecast[0]:
+            measurement_dims.append(o.dim)
+            measurement_cum_dims.append(current)
+            current += o.dim
+
+        measurement_cum_dims.append(current)
+
+        #Reproject
+        measurement_forecast_projected = []
+        for x in measurement_forecast:
+            add = matrix([[]]).reshape((0,1))
+            for i in xrange(len(x)):
+                add = matrix(concatenate((add,measurement_means[i].log(x[i]))))
+            measurement_forecast_projected.append(add)
+
+        #Update measurement forecast mean and covariance
+        mean_z = 0
+        for i in xrange(len(measurement_forecast_projected)):
+            mean_z += weights[i]*measurement_forecast_projected[i]
+
+        covar_z = 0
+        for i in xrange(len(measurement_forecast)):
+            deviation = measurement_forecast_projected[i]-mean_z
+            covar_z += weights[i]*(deviation*deviation.getT())
+            
+        #Repack mean z
+        mean_z_objects = packPoints(measurement_means,[mean_z],range(len(measurement_forecast[0])),measurement_types,measurement_dims)[0]
+
+        #Associate data
+        measurement_associated = []
+        indices_associated = []
+
+        for i in xrange(len(measurement)):
+            if isinstance(measurement[i], list):
+                ai = associateData(measurement[i], [(measurement_means[j],mean_z[measurement_cum_dims[j]:measurement_cum_dims[j+1]],covar_z[measurement_cum_dims[j]:measurement_cum_dims[j+1],measurement_cum_dims[j]:measurement_cum_dims[j+1]]) for j in indices[i]], indices[i], scoreThresh[i%len(scoreThresh)])
+                if ai != None:
+                    measurement_associated.extend(measurement[i])
+                    indices_associated.extend(ai)
+                else:
+                    #association error
+                    raise Exception("Error associating measurements")
+            else:
+                measurement_associated.append(measurement[i])
+                indices_associated.append(indices[i])
+
+        slice_indices = []
+        associated_cum_dims = [0]
+        current = 0
+        for i in indices_associated:
+            slice_indices.extend(range(measurement_cum_dims[i],measurement_cum_dims[i+1]))
+            current += measurement_cum_dims[i+1]-measurement_cum_dims[i]
+            associated_cum_dims.append(current)
+
+        mean_z = mean_z[array(slice_indices)]
+        covar_z = covar_z[array(slice_indices).reshape((len(slice_indices),1)), array(slice_indices)]
+            
+        #Calculate Kalman gain
+        cross_covar = 0
+        for i in xrange(len(measurement_forecast)):
+            cross_covar += weights[i]*((deltas[i][0:self.state_dim])*(measurement_forecast_projected[i][array(slice_indices)]-mean_z).getT())
+
+        #gain = cross_covar * covar_z.getI()
+
+        gain = cross_covar * covar_z.getI()
+
+        #Reproject Measurement
+        measurement_projected = matrix([[]]).reshape((0,1))
+        for i in xrange(len(measurement_associated)):
+            measurement_projected = matrix(concatenate((measurement_projected,measurement_means[indices_associated[i]].log(measurement_associated[i],(self.syms[indices_associated[i]],mean_z[associated_cum_dims[i]:associated_cum_dims[i+1]],covar_z[associated_cum_dims[i]:associated_cum_dims[i+1],associated_cum_dims[i]:associated_cum_dims[i+1]])))))
+
+        tangent_space_mean = gain*(measurement_projected-mean_z)
+            
+        #Measurement-corrected updates to mean and covariance
+        packRel = list(self.mean)
+        
+        self.mean = packPoints(packRel, [tangent_space_mean], range(len(self.mean)), self.types, self.dims)[0]
+
+        self.covar[0:self.state_dim,0:self.state_dim] = self.covar[0:self.state_dim,0:self.state_dim] - gain*covar_z*gain.getT()
+
     def getMarginalDistribution(self):
         #Pack in order to return
         return (range(len(self.dims)), getPackedSigmaPoints(self.mean, matrix(zeros((self.state_dim,1))), self.covar[0:self.state_dim,0:self.state_dim], range(len(self.dims)), self.types, self.dims))
@@ -282,11 +292,11 @@ def fixSigma(sigma, ridge = 0):
         print '** Symmetric, but complex eigs **'
     minEig = min(eigs)
     if minEig < 0:
-        raw_input('** Not positive definite **'+str(minEig))
+        print '** Not positive definite **'+str(minEig)
     elif minEig < ridge:
         print '** Adding ridge', ridge, 'because minEig is', minEig, '**'
     if minEig < ridge:
-        sigma = sigma + 2 * (ridge - minEig) * identity(len(sigma))
+        sigma = sigma + matrix(2 * (ridge - minEig) * identity(len(sigma)))
     return sigma
 
 def packPoints(mean, deltas, indices, types, dims):

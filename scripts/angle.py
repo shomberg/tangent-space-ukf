@@ -50,7 +50,13 @@ class Angle:
                     bestProb = probability
             return bestRot
         else:
-            return matrix([[other.toRadians()-self.toRadians()]])
+            diff = other.toRadians()-self.toRadians()
+            ret = diff
+            if abs(ret) > abs(diff+2*pi):
+                ret = diff+2*pi
+            if abs(ret) > abs(diff-2*pi):
+                ret = diff-2*pi
+            return matrix([[ret]])
         
     def relative(self, reference):
         if not isinstance(reference, Angle):

@@ -23,13 +23,17 @@ class Vector:
     def log(self, other, symmetry=None):
         return other.v-self.v
 
-    def relative(self, reference, indices):
+    def relative(self, reference, indices=None):
         if isinstance(reference, Vector):
+            if not indices:
+                indices=range(len(self.v))
             ret = self.v.copy()
             for i in xrange(len(indices)):
                 ret[indices[i]] -= reference.v[i]
             return Vector(ret)
         elif isinstance(reference, Angle):
+            if not indices:
+                raise ValueError('for angles, must pass relative indices')
             ret = self.v.copy()
             theta = reference.toRadians()
             ret[indices[1]] = self.v[indices[1]]*cos(theta)-self.v[indices[0]]*sin(theta)
