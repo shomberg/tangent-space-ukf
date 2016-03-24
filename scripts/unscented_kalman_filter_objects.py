@@ -48,7 +48,8 @@ class UnscentedKalmanFilter:
         self.types.append(mean.__class__)
         low_noise = self.process_noise_dim
         high_noise = self.process_noise_dim+noise.shape[0]
-        self.update_functions.append(lambda command, objs, noise: f(command, objs, noise, [len(self.mean)-1]+of_obj_indices, range(low_noise, high_noise)))
+        new_index = len(self.mean)-1
+        self.update_functions.append(lambda command, objs, noise: f(command, objs, noise, [new_index]+of_obj_indices, range(low_noise, high_noise)))
         self.process_noise_dim += noise.shape[0]
         self.dim += mean.dim + noise.shape[0]
 
