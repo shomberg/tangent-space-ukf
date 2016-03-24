@@ -11,7 +11,7 @@ from kalman_util import append_matrices
 import pdb
 
 class UnscentedKalmanFilter:
-    def __init__(self, mean, covars, f, h, symmetries, Q, R, new):
+    def __init__(self, mean, covars, fs, hs, symmetries, Q, R, new):
         self.new = new
         self.version = 2
         #Unpack mean vector from objects
@@ -36,9 +36,30 @@ class UnscentedKalmanFilter:
         
         #Augmented covariance matrix
         self.covar = append_matrices([self.covar,Q,R])
-        self.update_function = f
-        self.measurement_predict_function = h
+        self.update_functions = fs
+        self.measurement_predict_functions = hs
         self.syms = symmetries
+
+    def addObject(self, mean, covar, f, of_obj_indices, noise):
+        self.mean.append(mean)
+        self.covar = append_matrices([self.covar[0:self.state_dim,0:self.state_dim], covar, self.covar[self.state_dim:self.state_dim+self.process_noise_dim,self.state_dim:self.state_dim+self.process_noise_dim], noise, self.covar[self.state_dim+self.process_noise_dim:,self.state_dim+self.process_noise_dim:]])
+        self.state_dim += mean.dim
+        self.dims.append(mean.dim)
+        self.types.append(mean.__class__)
+        low_noise = self.process_noise_dim
+        high_noise = self.process_noise_dim+noise.shape[0]
+        self.update_functions.append(lambda command, objs, noise: f(command, objs, noise, [len(self.mean)-1]+of_obj_indices, range(low_noise, high_noise)))
+        self.process_noise_dim += noise.shape[0]
+        self.dim += mean.dim + noise.shape[0]
+
+    def addObservation(self, h, symmetry, of_obj_indices, noise):
+        self.syms.append(symmetry)
+        self.covar = append_matrices((self.covar, noise))
+        low_noise = self.measurement_noise_dim
+        high_noise = self.measurement_noise_dim+noise.shape[0]
+        self.measurement_predict_functions.append(lambda state, noise: h(state, noise, of_obj_indices, range(low_noise, high_noise)))
+        self.measurement_noise_dim += noise.shape[0]
+        self.dim += noise.shape[0]
 
     def stateUpdate(self, command=None, W_0=.001):
         #Select sigma points
@@ -49,7 +70,10 @@ class UnscentedKalmanFilter:
         #Apply unscented transformation
         state_forecast = []
         for i in xrange(len(object_points)):
-            state_forecast.append(self.update_function(command, object_points[i],deltas[i][self.state_dim:self.state_dim+self.process_noise_dim,0]))
+            add = []
+            for j in xrange(len(object_points[i])):
+                add.append(self.update_functions[j](command, object_points[i],deltas[i][self.state_dim:self.state_dim+self.process_noise_dim,0]))
+            state_forecast.append(add)
 
         #Calculate appropriate(mean) space for reprojection
         forecast_mean = []
@@ -79,7 +103,6 @@ class UnscentedKalmanFilter:
         self.mean = packPoints(forecast_mean, [tangent_space_mean], range(len(forecast_mean)), self.types, self.dims)[0]
 
         self.covar[0:covar_state.shape[0],0:covar_state.shape[1]] = covar_state
-        
 
     def measurementUpdate(self, measurement, indices, W_0=.001, scoreThresh=[None]):
         #Select sigma points
@@ -92,8 +115,10 @@ class UnscentedKalmanFilter:
         #Predict measurements at forecast sigma points
         measurement_forecast = []
         for i in xrange(len(object_points)):
-            t = self.measurement_predict_function(object_points[i], deltas[i][self.state_dim+self.process_noise_dim:,0])
-            measurement_forecast.append(t)
+            add = []
+            for f in self.measurement_predict_functions:
+                add.append(f(object_points[i], deltas[i][self.state_dim+self.process_noise_dim:,0]))
+            measurement_forecast.append(add)
 
         measurement_types = []
         for m in measurement_forecast[0]:
