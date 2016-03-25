@@ -1,11 +1,12 @@
 from unscented_kalman_filter_objects import UnscentedKalmanFilter
-from numpy import matrix
+import numpy as np
+import pdb
 
 class FilterSystem():
     def __init__(self):
         self.objects = {}
         self.observations = {}
-        self.k = UnscentedKalmanFilter([], [], [], [], [], matrix([[]]).reshape((0,0)), matrix([[]]).reshape((0,0)),True)
+        self.k = UnscentedKalmanFilter([], [], [], [], [], np.matrix([[]]).reshape((0,0)), np.matrix([[]]).reshape((0,0)),True)
 
     def addObject(self, name):
         self.objects[name] = FilterObject()
@@ -52,6 +53,51 @@ class FilterSystem():
             else:
                 indices.append(self.getObservation(i).index)
         self.k.measurementUpdate(measurement, indices)
+
+    def getMarginalSigmas(self, of_objs):
+        of_indices = []
+        for (obj, att) in of_objs:
+            of_indices.append(self.getObject(obj).getAttribute(att).index)
+        full = self.k.getMarginalDistribution()
+        return [[point[i] for i in of_indices] for point in full[1]]
+
+    def getMarginalTangentSpace(self, of_objs):
+        of_indices = []
+        for (obj, att) in of_objs:
+            of_indices.append(self.getObject(obj).getAttribute(att).index)
+        full = self.k.getMarginalDistributionTangent()
+        cum_dims = [0]+np.cumsum(full[3])
+        cov_index = []
+        for i in of_indices:
+            cov_index.extend(range(cum_dims[i],cum_dims[i+1]))
+        return ([full[1][i] for i in of_indices], full[2][np.array(cov_index)][:,np.array(cov_index)])
+
+    def getConditionalSigmas(self, of_objs, cond_objs, cond_vals):
+        of_indices = []
+        for (obj, att) in of_objs:
+            of_indices.append(self.getObject(obj).getAttribute(att).index)
+        cond_indices = []
+        for (obj, att) in cond_objs:
+            cond_indices.append(self.getObject(obj).getAttribute(att).index)
+        full = self.k.getConditionalDistribution(cond_indices,cond_vals)
+        return [[point[full[0].index(i)] for i in of_indices] for point in full[1]]
+        
+    def getConditionalTangentSpace(self, of_objs, cond_objs, cond_vals):
+        pdb.set_trace()
+        of_indices = []
+        for (obj, att) in of_objs:
+            of_indices.append(self.getObject(obj).getAttribute(att).index)
+        cond_indices = []
+        for (obj, att) in cond_objs:
+            cond_indices.append(self.getObject(obj).getAttribute(att).index)
+        full = self.k.getConditionalDistributionTangent(cond_indices,cond_vals)
+        cum_dims = np.append([0],np.cumsum(full[3]))
+        cov_index = []
+        for i in of_indices:
+            cov_index.extend(range(cum_dims[full[0].index(i)],cum_dims[full[0].index(i)+1]))
+        return ([full[1][full[0].index(i)] for i in of_indices], full[2][np.array(cov_index)][:,np.array(cov_index)])
+
+        
 
 class FilterObservation():
     def __init__(self, index):

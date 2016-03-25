@@ -218,6 +218,10 @@ class UnscentedKalmanFilter:
         #Pack in order to return
         return (range(len(self.dims)), getPackedSigmaPoints(self.mean, matrix(zeros((self.state_dim,1))), self.covar[0:self.state_dim,0:self.state_dim], range(len(self.dims)), self.types, self.dims))
 
+    def getMarginalDistributionTangent(self):
+        #Pack in order to return
+        return (range(len(self.mean)), self.mean, self.covar[0:self.state_dim,0:self.state_dim], self.dims)
+
     def sampleMarginalDistribution(self):
         sample = matrix(random.multivariate_normal(zeros((self.state_dim)), cov=self.covar[0:self.state_dim,0:self.state_dim])).getT()
         
@@ -254,6 +258,37 @@ class UnscentedKalmanFilter:
         s_prime = s11 - s12*s22.getI()*s21
         rest = list(set(range(len(self.dims)))-set(indices))
         return (rest, getPackedSigmaPoints(self.mean, m_prime, s_prime, rest, self.types, self.dims))
+
+    def getConditionalDistributionTangent(self, indices, values):
+        #Calculate cumulative indices in the mean vector
+        counter = 0
+        cum_indices = []
+        for i in range(len(self.dims)):
+            if i in indices:
+                cum_indices.extend(range(counter,counter+self.dims[i]))
+            counter += self.dims[i]
+
+        #Mask with newly calculated indices
+        state_mask = ones(self.state_dim,dtype=bool)
+        state_mask[cum_indices] = False
+        condition_mask = logical_not(state_mask)
+        s11 = self.covar[state_mask][:,state_mask]
+        s12 = self.covar[state_mask][:,condition_mask]
+        s21 = self.covar[condition_mask][:,state_mask]
+        s22 = self.covar[condition_mask][:,condition_mask]
+        m1 = zeros((sum(state_mask),1))
+        m2 = zeros((sum(condition_mask),1))
+
+        #Project conditioned values
+        value_projected = matrix([[]]).reshape((0,1))
+        for i in xrange(len(values)):
+            value_projected = matrix(concatenate((value_projected,self.mean[indices[i]].log(values[i]))))
+
+        #Calculate new mean
+        m_prime = m1 + s12*s22.getI()*(value_projected-m2)
+        s_prime = s11 - s12*s22.getI()*s21
+        rest = list(set(range(len(self.dims)))-set(indices))
+        return (rest, packPoints(self.mean, [m_prime], rest, self.types, self.dims)[0], s_prime, [self.dims[i] for i in rest])
         
 
     def sampleConditionalDistribution(self, indices, values):
